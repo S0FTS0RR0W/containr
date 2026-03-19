@@ -172,6 +172,7 @@ function NavIcon(props: React.SVGProps<SVGSVGElement>) {
       strokeWidth="1.8"
       {...props}
     >
+      <title>Navigation panel icon</title>
       <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
       <path d="M8 9.5h8M8 14.5h5" />
     </svg>
@@ -187,6 +188,7 @@ function TerminalIcon(props: React.SVGProps<SVGSVGElement>) {
       strokeWidth="1.8"
       {...props}
     >
+      <title>Terminal icon</title>
       <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
       <path d="m8 10 2.5 2.5L8 15" />
       <path d="M13 15h3.5" />
@@ -203,6 +205,7 @@ function StackIcon(props: React.SVGProps<SVGSVGElement>) {
       strokeWidth="1.8"
       {...props}
     >
+      <title>Container stack icon</title>
       <path d="m12 4 8 4.4-8 4.3-8-4.3L12 4Z" />
       <path d="m4 12.1 8 4.4 8-4.4" />
       <path d="m4 15.8 8 4.2 8-4.2" />
@@ -475,9 +478,13 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <div className="space-y-3 px-5 py-5 font-mono text-sm text-emerald-200/90">
-                  {terminalLines.map((line, index) => (
+                  {terminalLines.map((line) => (
                     <div
-                      key={`${index}-${"command" in line ? line.command : line.output}`}
+                      key={
+                        "command" in line
+                          ? `${line.prompt}-${line.path}-${line.command}`
+                          : line.output
+                      }
                     >
                       {"output" in line ? (
                         <p className="text-emerald-100/70">{line.output}</p>
