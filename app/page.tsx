@@ -1,130 +1,21 @@
+import NextLink from "next/link";
 import { Button } from "@/components/ui/button";
-
-const metrics = [
-  {
-    label: "Running containers",
-    value: "18",
-    detail: "+3 since deploy window",
-    tone: "emerald",
-  },
-  {
-    label: "Host CPU",
-    value: "42%",
-    detail: "8-core Debian node",
-    tone: "sky",
-  },
-  {
-    label: "Memory in use",
-    value: "21.6 GB",
-    detail: "of 64 GB available",
-    tone: "amber",
-  },
-  {
-    label: "Open terminal sessions",
-    value: "4",
-    detail: "2 interactive, 2 watch",
-    tone: "violet",
-  },
-] as const;
-
-const containers = [
-  {
-    name: "api-gateway",
-    image: "ghcr.io/containr/gateway:1.8.2",
-    status: "healthy",
-    cpu: "0.33 cores",
-    memory: "512 MB",
-    ports: "80, 443",
-    uptime: "14d 8h",
-  },
-  {
-    name: "worker-batch",
-    image: "ghcr.io/containr/worker:2.1.0",
-    status: "warming",
-    cpu: "0.82 cores",
-    memory: "1.4 GB",
-    ports: "internal",
-    uptime: "11m",
-  },
-  {
-    name: "postgres-main",
-    image: "postgres:16-alpine",
-    status: "healthy",
-    cpu: "0.29 cores",
-    memory: "4.8 GB",
-    ports: "5432",
-    uptime: "37d 2h",
-  },
-  {
-    name: "redis-cache",
-    image: "redis:7.4",
-    status: "degraded",
-    cpu: "0.18 cores",
-    memory: "894 MB",
-    ports: "6379",
-    uptime: "6d 5h",
-  },
-] as const;
-
-const activity = [
-  {
-    title: "Terminal attached to api-gateway",
-    detail: "root@api-gateway:/srv/app",
-    time: "2m ago",
-  },
-  {
-    title: "Container restart policy changed",
-    detail: "worker-batch set to unless-stopped",
-    time: "18m ago",
-  },
-  {
-    title: "Image pull completed",
-    detail: "postgres:16-alpine pulled in 12.3s",
-    time: "44m ago",
-  },
-  {
-    title: "Alert triggered",
-    detail: "redis-cache memory threshold exceeded",
-    time: "1h ago",
-  },
-] as const;
-
-const terminalLines = [
-  {
-    prompt: "ops@node-03",
-    path: "~",
-    command: 'docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"',
-  },
-  {
-    output:
-      "api-gateway      Up 14 days (healthy)        0.0.0.0:80->80/tcp, 443->443/tcp",
-  },
-  { output: "worker-batch     Up 11 minutes               " },
-  {
-    output:
-      "postgres-main    Up 37 days                  0.0.0.0:5432->5432/tcp",
-  },
-  {
-    output:
-      "redis-cache      Restarting (137) 22s ago    0.0.0.0:6379->6379/tcp",
-  },
-  {
-    prompt: "ops@node-03",
-    path: "~",
-    command: "docker exec -it api-gateway sh",
-  },
-  {
-    prompt: "root@api-gateway",
-    path: "/srv/app",
-    command: "tail -f /var/log/nginx/access.log",
-  },
-] as const;
+import { type ContainerHealth, getHostSnapshot } from "@/lib/host-snapshot";
 
 const quickActions = [
-  "Create container",
-  "Open compose stack",
-  "Attach terminal",
-  "Review host logs",
+  { label: "Open host API", href: "/api/host/overview" },
+  {
+    label: "Docker contexts",
+    href: "https://docs.docker.com/engine/context/working-with-contexts/",
+  },
+  {
+    label: "Container logs",
+    href: "https://docs.docker.com/reference/cli/docker/container/logs/",
+  },
+  {
+    label: "Exec shell",
+    href: "https://docs.docker.com/reference/cli/docker/container/exec/",
+  },
 ] as const;
 
 const navigation = [
@@ -135,7 +26,9 @@ const navigation = [
   { label: "Networks", icon: NavIcon },
 ] as const;
 
-function toneClasses(tone: (typeof metrics)[number]["tone"]) {
+type MetricTone = "emerald" | "sky" | "amber" | "violet";
+
+function toneClasses(tone: MetricTone) {
   if (tone === "emerald") {
     return "from-emerald-400/30 via-emerald-300/10 to-transparent text-emerald-200";
   }
@@ -151,7 +44,7 @@ function toneClasses(tone: (typeof metrics)[number]["tone"]) {
   return "from-violet-400/30 via-violet-300/10 to-transparent text-violet-200";
 }
 
-function statusClasses(status: (typeof containers)[number]["status"]) {
+function statusClasses(status: ContainerHealth) {
   if (status === "healthy") {
     return "bg-emerald-500/15 text-emerald-200 ring-1 ring-inset ring-emerald-400/30";
   }
@@ -213,7 +106,51 @@ function StackIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-export default function Dashboard() {
+export default async function Dashboard() {
+  const snapshot = await getHostSnapshot();
+
+  const metrics = [
+    {
+      label: "Running containers",
+      value: String(snapshot.runningContainers),
+      detail: snapshot.connected
+        ? `${snapshot.containers.length} visible in current context`
+        : "host unreachable",
+      tone: "emerald" as const,
+    },
+    {
+      label: "Host CPU",
+      value: snapshot.cpuLabel,
+      detail: `${snapshot.hostName}`,
+      tone: "sky" as const,
+    },
+    {
+      label: "Memory in use",
+      value: snapshot.memoryUsedLabel,
+      detail: `of ${snapshot.memoryTotalLabel}`,
+      tone: "amber" as const,
+    },
+    {
+      label: "Open terminal sessions",
+      value: String(snapshot.terminalSessions),
+      detail: "wire this to your websocket session manager",
+      tone: "violet" as const,
+    },
+  ];
+
+  const connectionBadges = snapshot.connected
+    ? [
+        `Context: ${snapshot.dockerContext}`,
+        `Engine ${snapshot.engineVersion}`,
+        `${snapshot.runningContainers} running containers`,
+        `${snapshot.composeProjects} compose projects`,
+      ]
+    : [
+        "Docker host unreachable",
+        `Socket: ${snapshot.dockerSocket}`,
+        "Check daemon and context",
+      ];
+
   return (
     <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(57,189,154,0.18),transparent_30%),radial-gradient(circle_at_top_right,rgba(56,189,248,0.16),transparent_26%),linear-gradient(180deg,#07111a_0%,#09141f_38%,#0b1320_100%)] text-white">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 px-4 py-4 sm:px-6 lg:flex-row lg:px-8">
@@ -253,23 +190,32 @@ export default function Dashboard() {
             </p>
             <div className="mt-4 flex items-end justify-between">
               <div>
-                <p className="text-3xl font-semibold">node-03</p>
+                <p className="text-3xl font-semibold">{snapshot.hostName}</p>
                 <p className="mt-1 text-sm text-cyan-50/75">
-                  Debian 13 . Docker Engine 28.1
+                  {snapshot.operatingSystem} . Docker Engine{" "}
+                  {snapshot.engineVersion}
                 </p>
               </div>
-              <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-medium text-emerald-200 ring-1 ring-emerald-300/20">
-                reachable
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ring-1 ${
+                  snapshot.connected
+                    ? "bg-emerald-400/15 text-emerald-200 ring-emerald-300/20"
+                    : "bg-rose-500/15 text-rose-200 ring-rose-400/30"
+                }`}
+              >
+                {snapshot.connected ? "reachable" : "offline"}
               </span>
             </div>
             <div className="mt-5 grid gap-3 text-sm text-cyan-50/80 sm:grid-cols-2 xl:grid-cols-1">
               <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
                 <p className="text-white/55">Docker socket</p>
-                <p className="mt-1 font-medium">unix:///var/run/docker.sock</p>
+                <p className="mt-1 font-medium">{snapshot.dockerSocket}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
                 <p className="text-white/55">Compose projects</p>
-                <p className="mt-1 font-medium">7 stacks tracked</p>
+                <p className="mt-1 font-medium">
+                  {snapshot.composeProjects} stacks tracked
+                </p>
               </div>
             </div>
           </div>
@@ -281,12 +227,20 @@ export default function Dashboard() {
             <div className="mt-4 grid gap-2">
               {quickActions.map((action) => (
                 <Button
-                  key={action}
+                  key={action.label}
+                  asChild
                   variant="outline"
                   className="justify-between rounded-2xl border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                 >
-                  {action}
-                  <span className="text-white/45">+</span>
+                  <NextLink
+                    href={action.href}
+                    target={
+                      action.href.startsWith("http") ? "_blank" : undefined
+                    }
+                  >
+                    {action.label}
+                    <span className="text-white/45">+</span>
+                  </NextLink>
                 </Button>
               ))}
             </div>
@@ -305,10 +259,9 @@ export default function Dashboard() {
                   leaving the control plane.
                 </h1>
                 <p className="mt-4 max-w-2xl text-sm leading-6 text-white/72 sm:text-base">
-                  This starter dashboard is set up for host metrics, container
-                  lifecycle actions, and interactive shell access. It gives you
-                  a strong landing page to connect Docker APIs, exec sessions,
-                  compose stacks, and log streams next.
+                  This panel now queries your active Docker host directly using
+                  server-side logic. Wire terminal session management and
+                  container actions next to turn this into a full control plane.
                 </p>
               </div>
 
@@ -326,12 +279,7 @@ export default function Dashboard() {
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3 text-sm text-white/70">
-              {[
-                "SSH tunnel ready",
-                "Exec API idle",
-                "4 terminals active",
-                "1 alert requires review",
-              ].map((item) => (
+              {connectionBadges.map((item) => (
                 <span
                   key={item}
                   className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5"
@@ -395,9 +343,9 @@ export default function Dashboard() {
               </div>
 
               <div className="mt-5 grid gap-3">
-                {containers.map((container) => (
+                {snapshot.containers.map((container) => (
                   <article
-                    key={container.name}
+                    key={container.id}
                     className="grid gap-4 rounded-[1.5rem] border border-white/10 bg-black/20 p-4 transition hover:border-cyan-300/20 hover:bg-black/25 lg:grid-cols-[1.5fr_0.7fr_0.7fr_0.65fr_auto] lg:items-center"
                   >
                     <div>
@@ -408,7 +356,7 @@ export default function Dashboard() {
                         <span
                           className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClasses(container.status)}`}
                         >
-                          {container.status}
+                          {container.statusText}
                         </span>
                       </div>
                       <p className="mt-1 font-mono text-xs text-white/45">
@@ -459,6 +407,12 @@ export default function Dashboard() {
                     </div>
                   </article>
                 ))}
+                {snapshot.containers.length === 0 ? (
+                  <article className="rounded-[1.5rem] border border-white/10 bg-black/20 p-4 text-sm text-white/65">
+                    No running containers were returned from the active Docker
+                    context.
+                  </article>
+                ) : null}
               </div>
             </section>
 
@@ -478,15 +432,15 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <div className="space-y-3 px-5 py-5 font-mono text-sm text-emerald-200/90">
-                  {terminalLines.map((line) => (
+                  {snapshot.terminalLines.map((line) => (
                     <div
                       key={
-                        "command" in line
+                        line.type === "command"
                           ? `${line.prompt}-${line.path}-${line.command}`
                           : line.output
                       }
                     >
-                      {"output" in line ? (
+                      {line.type === "output" ? (
                         <p className="text-emerald-100/70">{line.output}</p>
                       ) : (
                         <p>
@@ -510,9 +464,9 @@ export default function Dashboard() {
                   Recent operations
                 </h2>
                 <div className="mt-5 space-y-4">
-                  {activity.map((item) => (
+                  {snapshot.activity.map((item) => (
                     <article
-                      key={item.title}
+                      key={item.id}
                       className="rounded-2xl border border-white/10 bg-black/20 p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -528,6 +482,23 @@ export default function Dashboard() {
                       </div>
                     </article>
                   ))}
+                  {snapshot.error ? (
+                    <article className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-rose-200">
+                            Connection error
+                          </p>
+                          <p className="mt-1 text-sm text-rose-100/80">
+                            {snapshot.error}
+                          </p>
+                        </div>
+                        <span className="text-xs text-rose-100/60">
+                          {new Date(snapshot.capturedAt).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    </article>
+                  ) : null}
                 </div>
               </section>
             </div>
