@@ -1,4 +1,5 @@
 import NextLink from "next/link";
+import { AccordionMenu } from "@/components/ui/accordion-menu";
 import { Button } from "@/components/ui/button";
 import { type ContainerHealth, getHostSnapshot } from "@/lib/host-snapshot";
 
@@ -108,6 +109,21 @@ function StackIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export default async function Dashboard() {
   const snapshot = await getHostSnapshot();
+
+  const quickActionItems = quickActions.map((action) => ({
+    id: action.label.toLowerCase().replace(/\s+/g, "-"),
+    title: action.label,
+    content: (
+      <NextLink
+        href={action.href}
+        target={action.href.startsWith("http") ? "_blank" : undefined}
+        className="inline-flex items-center gap-2 text-cyan-200 hover:text-cyan-100"
+      >
+        Open action
+        <span aria-hidden="true">+</span>
+      </NextLink>
+    ),
+  }));
 
   const metrics = [
     {
@@ -224,25 +240,8 @@ export default async function Dashboard() {
             <p className="text-xs uppercase tracking-[0.3em] text-white/45">
               Quick actions
             </p>
-            <div className="mt-4 grid gap-2">
-              {quickActions.map((action) => (
-                <Button
-                  key={action.label}
-                  asChild
-                  variant="outline"
-                  className="justify-between rounded-2xl border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
-                >
-                  <NextLink
-                    href={action.href}
-                    target={
-                      action.href.startsWith("http") ? "_blank" : undefined
-                    }
-                  >
-                    {action.label}
-                    <span className="text-white/45">+</span>
-                  </NextLink>
-                </Button>
-              ))}
+            <div className="mt-4">
+              <AccordionMenu items={quickActionItems} allowMultiple />
             </div>
           </div>
         </aside>
