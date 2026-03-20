@@ -1,7 +1,16 @@
+import { revalidatePath } from "next/cache";
 import NextLink from "next/link";
+import type { SVGProps } from "react";
+
+import { TerminalWorkbench } from "@/components/dashboard/terminal-workbench";
 import { AccordionMenu } from "@/components/ui/accordion-menu";
 import { Button } from "@/components/ui/button";
-import { type ContainerHealth, getHostSnapshot } from "@/lib/host-snapshot";
+import {
+  type ContainerAction,
+  type ContainerHealth,
+  getHostSnapshot,
+  runContainerAction,
+} from "@/lib/host-snapshot";
 
 const quickActions = [
   { label: "Open host API", href: "/api/host/overview" },
@@ -57,7 +66,7 @@ function statusClasses(status: ContainerHealth) {
   return "bg-rose-500/15 text-rose-200 ring-1 ring-inset ring-rose-400/30";
 }
 
-function NavIcon(props: React.SVGProps<SVGSVGElement>) {
+function NavIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -73,7 +82,7 @@ function NavIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function TerminalIcon(props: React.SVGProps<SVGSVGElement>) {
+function TerminalIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -90,7 +99,7 @@ function TerminalIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function StackIcon(props: React.SVGProps<SVGSVGElement>) {
+function StackIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -109,6 +118,24 @@ function StackIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export default async function Dashboard() {
   const snapshot = await getHostSnapshot();
+
+  async function mutateContainerAction(formData: FormData) {
+    "use server";
+
+    const containerId = String(formData.get("containerId") ?? "").trim();
+    const action = String(formData.get("action") ?? "").trim();
+
+    if (!containerId) {
+      return;
+    }
+
+    if (action !== "start" && action !== "stop" && action !== "restart") {
+      return;
+    }
+
+    await runContainerAction(containerId, action as ContainerAction);
+    revalidatePath("/");
+  }
 
   const quickActionItems = quickActions.map((action) => ({
     id: action.label.toLowerCase().replace(/\s+/g, "-"),
@@ -149,7 +176,7 @@ export default async function Dashboard() {
     {
       label: "Open terminal sessions",
       value: String(snapshot.terminalSessions),
-      detail: "wire this to your websocket session manager",
+      detail: "local terminal sessions are now available below",
       tone: "violet" as const,
     },
   ];
@@ -265,14 +292,23 @@ export default async function Dashboard() {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <Button className="rounded-2xl bg-white text-slate-950 hover:bg-white/90">
-                  Launch terminal
+                <Button
+                  asChild
+                  className="rounded-2xl bg-white text-slate-950 hover:bg-white/90"
+                >
+                  <NextLink href="#terminal-panel">Launch terminal</NextLink>
                 </Button>
                 <Button
+                  asChild
                   variant="outline"
                   className="rounded-2xl border-white/15 bg-white/8 text-white hover:bg-white/12 hover:text-white"
                 >
-                  New container
+                  <NextLink
+                    href="https://docs.docker.com/reference/cli/docker/container/create/"
+                    target="_blank"
+                  >
+                    New container
+                  </NextLink>
                 </Button>
               </div>
             </div>
@@ -330,13 +366,22 @@ export default async function Dashboard() {
                 </div>
                 <div className="flex gap-2">
                   <Button
+                    asChild
                     variant="outline"
                     className="rounded-2xl border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                   >
-                    Filter
+                    <NextLink href="/api/host/overview">Refresh</NextLink>
                   </Button>
-                  <Button className="rounded-2xl bg-cyan-300 text-slate-950 hover:bg-cyan-200">
-                    Deploy stack
+                  <Button
+                    asChild
+                    className="rounded-2xl bg-cyan-300 text-slate-950 hover:bg-cyan-200"
+                  >
+                    <NextLink
+                      href="https://docs.docker.com/reference/cli/docker/compose/up/"
+                      target="_blank"
+                    >
+                      Deploy stack
+                    </NextLink>
                   </Button>
                 </div>
               </div>
@@ -391,18 +436,61 @@ export default async function Dashboard() {
                         {container.uptime}
                       </span>
                       <Button
+                        asChild
                         variant="outline"
                         size="sm"
                         className="rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                       >
-                        Logs
+                        <NextLink
+                          href={`/api/containers/${container.id}/logs?tail=200`}
+                          target="_blank"
+                        >
+                          Logs
+                        </NextLink>
                       </Button>
                       <Button
+                        asChild
+                        variant="outline"
                         size="sm"
-                        className="rounded-xl bg-white text-slate-950 hover:bg-white/90"
+                        className="rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                       >
-                        Shell
+                        <NextLink href="#terminal-panel">Terminal</NextLink>
                       </Button>
+                      <form action={mutateContainerAction}>
+                        <input
+                          type="hidden"
+                          name="containerId"
+                          value={container.id}
+                        />
+                        <input type="hidden" name="action" value="restart" />
+                        <Button
+                          size="sm"
+                          className="rounded-xl bg-white text-slate-950 hover:bg-white/90"
+                        >
+                          Restart
+                        </Button>
+                      </form>
+                      <form action={mutateContainerAction}>
+                        <input
+                          type="hidden"
+                          name="containerId"
+                          value={container.id}
+                        />
+                        <input
+                          type="hidden"
+                          name="action"
+                          value={
+                            container.status === "degraded" ? "start" : "stop"
+                          }
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                        >
+                          {container.status === "degraded" ? "Start" : "Stop"}
+                        </Button>
+                      </form>
                     </div>
                   </article>
                 ))}
@@ -416,42 +504,32 @@ export default async function Dashboard() {
             </section>
 
             <div className="space-y-6">
-              <section className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#071017]">
+              <section
+                id="terminal-panel"
+                className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#071017]"
+              >
                 <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
                   <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/45">
                       Terminal
                     </p>
                     <h2 className="mt-1 text-2xl font-semibold text-white">
-                      Live shell preview
+                      Interactive shell
                     </h2>
                   </div>
                   <span className="rounded-full bg-emerald-400/12 px-3 py-1 text-xs font-medium text-emerald-200 ring-1 ring-emerald-300/20">
-                    connected
+                    ready
                   </span>
                 </div>
-                <div className="space-y-3 px-5 py-5 font-mono text-sm text-emerald-200/90">
-                  {snapshot.terminalLines.map((line) => (
-                    <div
-                      key={
-                        line.type === "command"
-                          ? `${line.prompt}-${line.path}-${line.command}`
-                          : line.output
-                      }
-                    >
-                      {line.type === "output" ? (
-                        <p className="text-emerald-100/70">{line.output}</p>
-                      ) : (
-                        <p>
-                          <span className="text-cyan-300">{line.prompt}</span>
-                          <span className="text-white/35">:</span>
-                          <span className="text-sky-200">{line.path}</span>
-                          <span className="text-white/35">$ </span>
-                          <span>{line.command}</span>
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                <div className="px-5 py-5">
+                  <TerminalWorkbench
+                    containers={snapshot.containers.map((container) => ({
+                      id: container.id,
+                      name: container.name,
+                      statusText: container.statusText,
+                    }))}
+                    initialLines={snapshot.terminalLines}
+                  />
                 </div>
               </section>
 

@@ -5,12 +5,16 @@ const execFileAsync = promisify(execFile);
 
 const DOCKER_BIN = process.env.DOCKER_BIN ?? "docker";
 const DOCKER_TIMEOUT_MS = Number(process.env.DOCKER_CMD_TIMEOUT_MS ?? 7000);
+const DOCKER_EXEC_TIMEOUT_MS = Number(
+  process.env.DOCKER_EXEC_TIMEOUT_MS ?? 15000,
+);
 const EXEC_OPTIONS = {
   timeout: DOCKER_TIMEOUT_MS,
   maxBuffer: 4 * 1024 * 1024,
   windowsHide: true,
 } as const;
 
+export type ContainerAction = "start" | "stop" | "restart";
 export type ContainerHealth = "healthy" | "warming" | "degraded";
 
 export type HostContainer = {
@@ -62,6 +66,12 @@ export type HostSnapshot = {
   containers: HostContainer[];
   terminalLines: TerminalLine[];
   activity: HostActivity[];
+};
+
+export type ContainerExecResult = {
+  ok: boolean;
+  output: string;
+  exitCode: number;
 };
 
 type DockerPsItem = {
@@ -160,6 +170,77 @@ function inferContainerHealth(statusText: string): ContainerHealth {
 async function runDockerCommand(args: string[]): Promise<string> {
   const result = await execFileAsync(DOCKER_BIN, args, EXEC_OPTIONS);
   return result.stdout.trim();
+}
+
+export async function runContainerAction(
+  containerId: string,
+  action: ContainerAction,
+): Promise<void> {
+  await runDockerCommand([action, containerId]);
+}
+
+export async function getContainerLogs(
+  containerId: string,
+  tail = 120,
+): Promise<string> {
+  const result = await execFileAsync(
+    DOCKER_BIN,
+    ["logs", "--tail", String(tail), containerId],
+    EXEC_OPTIONS,
+  );
+
+  const output = [result.stdout, result.stderr]
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join("\n");
+
+  return output;
+}
+
+export async function executeContainerCommand(
+  containerId: string,
+  command: string,
+): Promise<ContainerExecResult> {
+  try {
+    const result = await execFileAsync(
+      DOCKER_BIN,
+      ["exec", containerId, "sh", "-lc", command],
+      {
+        ...EXEC_OPTIONS,
+        timeout: DOCKER_EXEC_TIMEOUT_MS,
+        maxBuffer: 8 * 1024 * 1024,
+      },
+    );
+
+    const output = [result.stdout, result.stderr]
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      ok: true,
+      output: output || "(no output)",
+      exitCode: 0,
+    };
+  } catch (error) {
+    const failure = error as {
+      stdout?: string;
+      stderr?: string;
+      code?: number | string;
+      message?: string;
+    };
+
+    const output = [failure.stdout, failure.stderr, failure.message]
+      .map((segment) => (segment ?? "").trim())
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      ok: false,
+      output: output || "Command failed with no output",
+      exitCode: typeof failure.code === "number" ? failure.code : 1,
+    };
+  }
 }
 
 async function tryDockerCommand(args: string[]): Promise<string> {
