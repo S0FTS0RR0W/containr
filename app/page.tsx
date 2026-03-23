@@ -4,13 +4,13 @@ import type { SVGProps } from "react";
 import { TerminalWorkbench } from "@/components/dashboard/terminal-workbench";
 import { AccordionMenu } from "@/components/ui/accordion-menu";
 import { Button } from "@/components/ui/button";
+import SettingsButton from "@/components/ui/settings-button";
 import {
   type ContainerAction,
   type ContainerHealth,
   getHostSnapshot,
   runContainerAction,
 } from "@/lib/host-snapshot";
-import SettingsButton from "@/components/ui/settings-button";
 
 const quickActions = [
   { label: "Open host API", href: "/api/host/overview" },
