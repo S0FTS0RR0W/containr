@@ -1,7 +1,6 @@
 import { revalidatePath } from "next/cache";
 import NextLink from "next/link";
 import type { SVGProps } from "react";
-
 import { TerminalWorkbench } from "@/components/dashboard/terminal-workbench";
 import { AccordionMenu } from "@/components/ui/accordion-menu";
 import { Button } from "@/components/ui/button";
@@ -11,6 +10,7 @@ import {
   getHostSnapshot,
   runContainerAction,
 } from "@/lib/host-snapshot";
+import SettingsButton from "@/components/ui/settings-button";
 
 const quickActions = [
   { label: "Open host API", href: "/api/host/overview" },
@@ -203,6 +203,9 @@ export default async function Dashboard() {
               <StackIcon className="size-5" />
             </div>
             <div>
+              <div className="flex items-to-right gap-2">
+                <SettingsButton />
+              </div>
               <p className="text-xs uppercase tracking-[0.3em] text-white/45">
                 Containr
               </p>
